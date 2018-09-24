@@ -92,6 +92,7 @@ import org.openRealmOfStars.starMap.newsCorp.NewsFactory;
 import org.openRealmOfStars.starMap.planet.BuildingFactory;
 import org.openRealmOfStars.starMap.planet.Planet;
 import org.openRealmOfStars.starMap.planet.construction.Building;
+import org.openRealmOfStars.utilities.DiceGenerator;
 import org.openRealmOfStars.utilities.ErrorLogger;
 import org.openRealmOfStars.utilities.repository.ConfigFileRepository;
 import org.openRealmOfStars.utilities.repository.GameRepository;
@@ -1516,6 +1517,31 @@ public class Game implements ActionListener {
       System.out.println(CreditsView.MAIN_CREDITS);
     } else if (args.length > 0 && args[0].equals("--wiki-research")) {
       System.out.println(printTechWiki());
+    } else if (args.length > 0 && args[0].equals("--simulation")) {
+      DiceGenerator.initializeGenerators(0, 0);
+      Game game = new Game(false);
+      GalaxyConfig config = new GalaxyConfig();
+      config.setMaxPlayers(8);
+      config.setScoringVictoryTurns(200);
+      config.setStartingPosition(GalaxyConfig.START_POSITION_RANDOM);
+      game.galaxyConfig = config;
+      game.setPlayerInfo();
+      game.makeNewGame();
+      game.players.getPlayerInfoByIndex(0).setHuman(false);
+      do {
+        System.out.println("Turn number: " + game.getStarMap().getTurn());
+        new GameRepository()
+        .saveGame(GameRepository.DEFAULT_SAVE_FOLDER, "simulation.save",
+            game.starMap);
+        game.aiTurnView = new AITurnView(game);
+        boolean singleTurnEnd = false;
+        do {
+         singleTurnEnd = game.aiTurnView.handleAiTurn(false);
+        } while (!singleTurnEnd);
+        System.out.println("Turn (" + game.getStarMap().getTurn() + ")"
+            + " ended...");
+      } while (!game.getStarMap().isGameEnded());
+      System.out.println("Simulation ended!");
     } else {
       if (args.length > 0 && args[0].equals("--no-music")) {
         System.out.println("Disabling the music...");

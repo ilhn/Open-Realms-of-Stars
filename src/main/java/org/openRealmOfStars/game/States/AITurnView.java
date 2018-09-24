@@ -1437,6 +1437,113 @@ public class AITurnView extends BlackPanel {
     }
   }
   /**
+   * Handle Ai Turn
+   * @param changeState Allow change state after turn
+   * @return True when turn has finished
+   */
+  public boolean handleAiTurn(final boolean changeState) {
+    if (game.getStarMap().getAIFleet() == null) {
+      game.getStarMap().handleAIResearchAndPlanets();
+      game.getStarMap().handleFakingMilitarySize();
+    } else {
+      handleAIFleet();
+      if (game.getGameState() != GameState.AITURN) {
+        // If last player is calling diplomacy screen
+        // it is not run due the line 556. There fore
+        // we need to exit at this point!
+        return false;
+      }
+    }
+    if (game.getStarMap().isAllAIsHandled()) {
+      updateStarMapToNextTurn();
+      for (int i = 0; i < game.getPlayers().getCurrentMaxPlayers(); i++) {
+        // Handle player research at end of turn
+        PlayerInfo info = game.getPlayers().getPlayerInfoByIndex(i);
+        info.getTechList().updateResearchPointByTurn(game.getStarMap()
+            .getTotalProductionByPlayerPerTurn(Planet.PRODUCTION_RESEARCH, i),
+            info, game.getStarMap().getScoreVictoryTurn());
+        int creditFlow = game.getStarMap().getTotalProductionByPlayerPerTurn(
+            Planet.PRODUCTION_CREDITS, i);
+        handleLowCreditWarning(info, creditFlow);
+        // Handle war fatigue for player
+        GovernmentType government = info.getGovernment();
+        if (!government.isImmuneToHappiness()) {
+          boolean fatigued = false;
+          int wars = info.getDiplomacy().getNumberOfWar();
+          if (game.getPlayers().getBoardPlayer() != null) {
+            // There is always war against board
+            wars = wars - 1;
+          }
+          int warFatigueValue = info.getWarFatigue()
+              / info.getRace().getWarFatigueResistance();
+          if (wars > 0 && wars > government.getWarResistance()) {
+            int fatigue = info.getWarFatigue();
+            fatigue = fatigue - wars + government.getWarResistance();
+            fatigued = true;
+            info.setWarFatigue(fatigue);
+          }
+          if (info.getTotalCredits() < 0) {
+            int fatigue = info.getWarFatigue();
+            fatigue = fatigue + info.getTotalCredits() * 5;
+            info.setWarFatigue(fatigue);
+            info.setTotalCredits(0);
+            fatigued = true;
+            Message msg = new Message(MessageType.INFORMATION,
+                "Realm credits has run out. This increased unhappiness!",
+                Icons.getIconByName(Icons.ICON_CREDIT));
+            info.getMsgList().addNewMessage(msg);
+          }
+          if (!fatigued && info.getWarFatigue() < 0) {
+            int fatigue = info.getWarFatigue();
+            int dec = fatigue / 4;
+            if (dec > 0) {
+              dec = -1;
+            }
+            fatigue = fatigue - dec;
+            info.setWarFatigue(fatigue);
+            if (info.getWarFatigue() == 0) {
+              Message msg = new Message(MessageType.INFORMATION,
+                  "War fatigue has ended!",
+                  Icons.getIconByName(Icons.ICON_HAPPY));
+              info.getMsgList().addNewMessage(msg);
+            }
+          } else {
+            int warFatigueValueAfter = info.getWarFatigue()
+                / info.getRace().getWarFatigueResistance();
+            if (warFatigueValueAfter < warFatigueValue) {
+              Message msg = new Message(MessageType.INFORMATION,
+                  "People is getting more tired of war!",
+                  Icons.getIconByName(Icons.ICON_SAD));
+              info.getMsgList().addNewMessage(msg);
+            }
+          }
+        } else {
+          if (info.getTotalCredits() < 0) {
+            int fatigue = info.getWarFatigue();
+            fatigue = fatigue + info.getTotalCredits();
+            info.setWarFatigue(fatigue);
+            info.setTotalCredits(0);
+            Message msg = new Message(MessageType.INFORMATION,
+                "Realm credits has run out."
+                + " This will cause building to collapse!",
+                Icons.getIconByName(Icons.ICON_CREDIT));
+            info.getMsgList().addNewMessage(msg);
+          }
+        }
+      }
+      game.getStarMap().clearAITurn();
+      if (changeState) {
+        if (game.getStarMap().getNewsCorpData().isNewsToShow()) {
+          game.changeGameState(GameState.NEWS_CORP_VIEW);
+        } else {
+          game.changeGameState(GameState.STARMAP);
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+  /**
    * Handle actions for AI Turn view
    * Since AI Turn View can be null while handling the all the AI. AI handling
    * variables are stored in StarMap. These variables are AIFleet and
@@ -1447,102 +1554,7 @@ public class AITurnView extends BlackPanel {
     if (arg0.getActionCommand()
         .equalsIgnoreCase(GameCommands.COMMAND_ANIMATION_TIMER)) {
       updateText();
-      if (game.getStarMap().getAIFleet() == null) {
-        game.getStarMap().handleAIResearchAndPlanets();
-        game.getStarMap().handleFakingMilitarySize();
-      } else {
-        handleAIFleet();
-        if (game.getGameState() != GameState.AITURN) {
-          // If last player is calling diplomacy screen
-          // it is not run due the line 556. There fore
-          // we need to exit at this point!
-          return;
-        }
-      }
-      if (game.getStarMap().isAllAIsHandled()) {
-        updateStarMapToNextTurn();
-        for (int i = 0; i < game.getPlayers().getCurrentMaxPlayers(); i++) {
-          // Handle player research at end of turn
-          PlayerInfo info = game.getPlayers().getPlayerInfoByIndex(i);
-          info.getTechList().updateResearchPointByTurn(game.getStarMap()
-              .getTotalProductionByPlayerPerTurn(Planet.PRODUCTION_RESEARCH, i),
-              info, game.getStarMap().getScoreVictoryTurn());
-          int creditFlow = game.getStarMap().getTotalProductionByPlayerPerTurn(
-              Planet.PRODUCTION_CREDITS, i);
-          handleLowCreditWarning(info, creditFlow);
-          // Handle war fatigue for player
-          GovernmentType government = info.getGovernment();
-          if (!government.isImmuneToHappiness()) {
-            boolean fatigued = false;
-            int wars = info.getDiplomacy().getNumberOfWar();
-            if (game.getPlayers().getBoardPlayer() != null) {
-              // There is always war against board
-              wars = wars - 1;
-            }
-            int warFatigueValue = info.getWarFatigue()
-                / info.getRace().getWarFatigueResistance();
-            if (wars > 0 && wars > government.getWarResistance()) {
-              int fatigue = info.getWarFatigue();
-              fatigue = fatigue - wars + government.getWarResistance();
-              fatigued = true;
-              info.setWarFatigue(fatigue);
-            }
-            if (info.getTotalCredits() < 0) {
-              int fatigue = info.getWarFatigue();
-              fatigue = fatigue + info.getTotalCredits() * 5;
-              info.setWarFatigue(fatigue);
-              info.setTotalCredits(0);
-              fatigued = true;
-              Message msg = new Message(MessageType.INFORMATION,
-                  "Realm credits has run out. This increased unhappiness!",
-                  Icons.getIconByName(Icons.ICON_CREDIT));
-              info.getMsgList().addNewMessage(msg);
-            }
-            if (!fatigued && info.getWarFatigue() < 0) {
-              int fatigue = info.getWarFatigue();
-              int dec = fatigue / 4;
-              if (dec > 0) {
-                dec = -1;
-              }
-              fatigue = fatigue - dec;
-              info.setWarFatigue(fatigue);
-              if (info.getWarFatigue() == 0) {
-                Message msg = new Message(MessageType.INFORMATION,
-                    "War fatigue has ended!",
-                    Icons.getIconByName(Icons.ICON_HAPPY));
-                info.getMsgList().addNewMessage(msg);
-              }
-            } else {
-              int warFatigueValueAfter = info.getWarFatigue()
-                  / info.getRace().getWarFatigueResistance();
-              if (warFatigueValueAfter < warFatigueValue) {
-                Message msg = new Message(MessageType.INFORMATION,
-                    "People is getting more tired of war!",
-                    Icons.getIconByName(Icons.ICON_SAD));
-                info.getMsgList().addNewMessage(msg);
-              }
-            }
-          } else {
-            if (info.getTotalCredits() < 0) {
-              int fatigue = info.getWarFatigue();
-              fatigue = fatigue + info.getTotalCredits();
-              info.setWarFatigue(fatigue);
-              info.setTotalCredits(0);
-              Message msg = new Message(MessageType.INFORMATION,
-                  "Realm credits has run out."
-                  + " This will cause building to collapse!",
-                  Icons.getIconByName(Icons.ICON_CREDIT));
-              info.getMsgList().addNewMessage(msg);
-            }
-          }
-        }
-        game.getStarMap().clearAITurn();
-        if (game.getStarMap().getNewsCorpData().isNewsToShow()) {
-          game.changeGameState(GameState.NEWS_CORP_VIEW);
-        } else {
-          game.changeGameState(GameState.STARMAP);
-        }
-      }
+      handleAiTurn(true);
     }
 
   }
